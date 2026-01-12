@@ -58,6 +58,14 @@ SCRATCHPAD_BASE_PATH="$HOME/scratch"
 SHELL_COMMAND="zsh"
 ```
 
+Or copy the example configuration file:
+
+```bash
+mkdir -p ~/.config/tmux-scratchpad
+cp config.example ~/.config/tmux-scratchpad/config
+# Then edit the config file with your preferred settings
+```
+
 ## How It Works
 
 1. **Get Name**: Prompts for a scratchpad directory name using `gum input` in a tmux popup (or uses the provided argument)
