@@ -63,7 +63,7 @@ open_session() {
     # Create session name from scratchpad name:
     # Replace dots with underscores (tmux doesn't like dots in session names)
     local session_name
-    session_name=$(echo "scratchpad_$scratchpad_name" | sed 's@\.@_@g')
+    session_name=$(echo "$scratchpad_dir" | sed 's@\.@_@g')
     
     # Check if session already exists
     if tmux has-session -t="$session_name" 2>/dev/null; then
