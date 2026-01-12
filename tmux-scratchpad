@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+# tmux-scratchpad: Create scratchpad directories and open them in tmux sessions
+
+set -o pipefail
+
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/tmux-scratchpad"
+CONFIG_FILE="$CONFIG_DIR/config"
+
+# Default base path for scratchpad directories
+SCRATCHPAD_BASE_PATH="${HOME}/scratchpad"
+
+# Optional command to execute in the shell
+SHELL_COMMAND=""
+
+# Check for required dependencies
+check_dependencies() {
+    local missing=()
+    
+    for cmd in gum tmux; do
+        if ! command -v "$cmd" &> /dev/null; then
+            missing+=("$cmd")
+        fi
+    done
+    
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        echo "Error: Missing required dependencies: ${missing[*]}" >&2
+        exit 1
+    fi
+}
+
+# Load configuration
+load_config() {
+    if [[ -f "$CONFIG_FILE" ]]; then
+        # shellcheck disable=SC1090
+        source "$CONFIG_FILE"
+    fi
+}
+
+# Get scratchpad name from user input
+get_scratchpad_name() {
+    local name
+    name=$(tmux display-popup -h 5 -E 'gum input --placeholder "Scratchpad name"')
+    echo "$name"
+}
+
+# Create or switch to tmux session for the scratchpad directory
+open_session() {
+    local scratchpad_name="$1"
+    
+    if [[ -z "$scratchpad_name" ]]; then
+        exit 0
+    fi
+    
+    # Expand base path
+    local base_path="${SCRATCHPAD_BASE_PATH/#\~/$HOME}"
+    local scratchpad_dir="$base_path/$scratchpad_name"
+    
+    # Create directory if it doesn't exist
+    if [[ ! -d "$scratchpad_dir" ]]; then
+        mkdir -p "$scratchpad_dir"
+    fi
+    
+    # Create session name from scratchpad name:
+    # Replace dots with underscores (tmux doesn't like dots in session names)
+    # Also replace slashes to handle nested paths
+    local session_name
+    session_name=$(echo "scratchpad_$scratchpad_name" | sed 's@\.@_@g; s@/@_@g')
+    
+    # Check if session already exists
+    if tmux has-session -t="$session_name" 2>/dev/null; then
+        # Session exists, switch to it
+        if [[ -n "$TMUX" ]]; then
+            tmux switch-client -t "$session_name"
+        else
+            tmux attach-session -t "$session_name"
+        fi
+    else
+        # Create new session
+        if [[ -n "$SHELL_COMMAND" ]]; then
+            # Create session with custom shell command
+            tmux new-session -d -s "$session_name" -c "$scratchpad_dir" "$SHELL_COMMAND"
+        else
+            # Create session with default shell
+            tmux new-session -d -s "$session_name" -c "$scratchpad_dir"
+        fi
+        
+        if [[ -n "$TMUX" ]]; then
+            tmux switch-client -t "$session_name"
+        else
+            tmux attach-session -t "$session_name"
+        fi
+    fi
+}
+
+# Show help
+show_help() {
+    cat << EOF
+tmux-scratchpad - Create scratchpad directories and open them in tmux sessions
+
+Usage: tmux-scratchpad [OPTIONS] [NAME]
+
+Options:
+    -h, --help      Show this help message
+    NAME            Optional scratchpad name (skips interactive input)
+
+Configuration:
+    Config file: $CONFIG_FILE
+    
+    The config file allows you to configure:
+    - SCRATCHPAD_BASE_PATH: Base directory for scratchpad folders (default: \$HOME/scratchpad)
+    - SHELL_COMMAND: Optional command to execute in the shell (e.g., "zsh" or "bash")
+
+Example config:
+    SCRATCHPAD_BASE_PATH="\$HOME/scratch"
+    SHELL_COMMAND="zsh"
+
+How it works:
+    - Prompts for a scratchpad directory name using gum input in a tmux popup
+    - Creates the directory under SCRATCHPAD_BASE_PATH if it doesn't exist
+    - If the directory exists, uses it in-place
+    - Creates or switches to a tmux session for that directory
+    - If the session already exists, switches to it
+
+Examples:
+    tmux-scratchpad              # Interactive scratchpad name input
+    tmux-scratchpad my-notes     # Create/open scratchpad named "my-notes"
+
+EOF
+}
+
+# Main function
+main() {
+    local scratchpad_name="${1:-}"
+    
+    load_config
+    check_dependencies
+    
+    # Get scratchpad name either from argument or user input
+    if [[ -z "$scratchpad_name" ]]; then
+        scratchpad_name=$(get_scratchpad_name)
+    fi
+    
+    open_session "$scratchpad_name"
+}
+
+# Parse command line arguments
+case "${1:-}" in
+    -h|--help)
+        show_help
+        exit 0
+        ;;
+    *)
+        main "$@"
+        ;;
+esac
